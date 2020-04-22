@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
+
+	"github.com/gobuffalo/nulls"
 )
 
-// Writes an array to row r. Accepts a pointer to array type 'e',
+// WriteSlice writes an array to row r. Accepts a pointer to array type 'e',
 // and writes the number of columns to write, 'cols'. If 'cols' is < 0,
 // the entire array will be written if possible. Returns -1 if the 'e'
 // doesn't point to an array, otherwise the number of columns written.
@@ -84,18 +87,18 @@ func (r *Row) WriteSlice(e interface{}, cols int) int {
 	return i
 }
 
-// Writes a struct to row r. Accepts a pointer to struct type 'e',
-// and the number of columns to write, `cols`. If 'cols' is < 0,
+// WriteStruct writes a struct to row r. Accepts a pointer to struct type
+// 'e', and the number of columns to write, `cols`. If 'cols' is < 0,
 // the entire struct will be written if possible. Returns -1 if the 'e'
 // doesn't point to a struct, otherwise the number of columns written
-func (r *Row) WriteStruct(e interface{}, cols int) int {
+func (r *Row) WriteStruct(e interface{}, cols int) (int, error) {
 	if cols == 0 {
-		return cols
+		return cols, nil
 	}
 
 	v := reflect.ValueOf(e).Elem()
 	if v.Kind() != reflect.Struct {
-		return -1 // bail if it's not a struct
+		return 0, errNotStructPointer
 	}
 
 	n := v.NumField() // number of fields in struct
@@ -105,32 +108,69 @@ func (r *Row) WriteStruct(e interface{}, cols int) int {
 
 	var k int
 	for i := 0; i < n; i, k = i+1, k+1 {
-		f := v.Field(i)
+		field := v.Type().Field(i)
+		idx := field.Tag.Get("xlsx")
 
+		if idx == "-" {
+			k-- // nothing set to reset to previous
+			continue
+		}
+
+		pos, err := strconv.Atoi(idx)
+		if err != nil {
+			return 0, errInvalidTag
+		}
+
+		f := v.Field(i)
 		switch t := f.Interface().(type) {
 		case time.Time:
-			cell := r.AddCell()
+			cell := r.GetCell(pos)
 			cell.SetValue(t)
 		case fmt.Stringer: // check Stringer first
-			cell := r.AddCell()
+			cell := r.GetCell(pos)
 			cell.SetString(t.String())
 		case sql.NullString: // check null sql types nulls = ''
-			cell := r.AddCell()
+			cell := r.GetCell(pos)
 			if cell.SetString(``); t.Valid {
 				cell.SetValue(t.String)
 			}
 		case sql.NullBool:
-			cell := r.AddCell()
+			cell := r.GetCell(pos)
 			if cell.SetString(``); t.Valid {
 				cell.SetBool(t.Bool)
 			}
 		case sql.NullInt64:
-			cell := r.AddCell()
+			cell := r.GetCell(pos)
 			if cell.SetString(``); t.Valid {
 				cell.SetValue(t.Int64)
 			}
 		case sql.NullFloat64:
-			cell := r.AddCell()
+			cell := r.GetCell(pos)
+			if cell.SetString(``); t.Valid {
+				cell.SetValue(t.Float64)
+			}
+		case nulls.String: // check null sql types nulls = ''
+			cell := r.GetCell(pos)
+			if cell.SetString(``); t.Valid {
+				cell.SetValue(t.String)
+			}
+		case nulls.Bool:
+			cell := r.GetCell(pos)
+			if cell.SetString(``); t.Valid {
+				cell.SetBool(t.Bool)
+			}
+		case nulls.Int:
+			cell := r.GetCell(pos)
+			if cell.SetString(``); t.Valid {
+				cell.SetValue(t.Int)
+			}
+		case nulls.Int64:
+			cell := r.GetCell(pos)
+			if cell.SetString(``); t.Valid {
+				cell.SetValue(t.Int64)
+			}
+		case nulls.Float64:
+			cell := r.GetCell(pos)
 			if cell.SetString(``); t.Valid {
 				cell.SetValue(t.Float64)
 			}
@@ -138,10 +178,10 @@ func (r *Row) WriteStruct(e interface{}, cols int) int {
 			switch f.Kind() {
 			case reflect.String, reflect.Int, reflect.Int8,
 				reflect.Int16, reflect.Int32, reflect.Int64, reflect.Float64, reflect.Float32:
-				cell := r.AddCell()
+				cell := r.GetCell(pos)
 				cell.SetValue(f.Interface())
 			case reflect.Bool:
-				cell := r.AddCell()
+				cell := r.GetCell(pos)
 				cell.SetBool(t.(bool))
 			default:
 				k-- // nothing set so reset to previous
@@ -149,5 +189,5 @@ func (r *Row) WriteStruct(e interface{}, cols int) int {
 		}
 	}
 
-	return k
+	return k, nil
 }

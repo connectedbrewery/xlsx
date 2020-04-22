@@ -13,8 +13,8 @@ type testStringerImpl struct {
 	Value string
 }
 
-func (this testStringerImpl) String() string {
-	return this.Value
+func (t testStringerImpl) String() string {
+	return t.Value
 }
 
 func TestWrite(t *testing.T) {
@@ -22,8 +22,7 @@ func TestWrite(t *testing.T) {
 
 	// Test if we can write a struct to a row
 	csRunO(c, "TestWriteStruct", func(c *qt.C, option FileOption) {
-		var f *File
-		f = NewFile(option)
+		f := NewFile(option)
 		sheet, _ := f.AddSheet("Test1")
 		row := sheet.AddRow()
 		type e struct {
@@ -60,13 +59,13 @@ func TestWrite(t *testing.T) {
 			sql.NullInt64{Int64: 100, Valid: false},
 			sql.NullFloat64{Float64: 0.123, Valid: false},
 		}
-		cnt := row.WriteStruct(&testStruct, -1)
+		cnt, err := row.WriteStruct(&testStruct, -1)
+		c.Error(err)
 		c.Assert(cnt, qt.Equals, 15)
 		c.Assert(row, qt.Not(qt.IsNil))
 
 		var (
 			c0, c4, c5, c7, c11, c12, c13, c14 string
-			err                                error
 			c6                                 float64
 		)
 		if c0, err = row.GetCell(0).FormattedValue(); err != nil {
@@ -130,8 +129,7 @@ func TestWrite(t *testing.T) {
 
 	// Test if we can write a slice to a row
 	csRunO(c, "TestWriteSlice", func(c *qt.C, option FileOption) {
-		var f *File
-		f = NewFile(option)
+		f := NewFile(option)
 		sheet, _ := f.AddSheet("Test1")
 
 		type strA []string
@@ -227,12 +225,12 @@ func TestWrite(t *testing.T) {
 		s7 := "expects -1 on non pointer to slice"
 		row7 := sheet.AddRow()
 		c.Assert(row7, qt.Not(qt.IsNil))
-		s7_ret := row7.WriteSlice(s7, -1)
-		c.Assert(s7_ret, qt.Equals, -1)
-		s7_ret = row7.WriteSlice(&s7, -1)
-		c.Assert(s7_ret, qt.Equals, -1)
-		s7_ret = row7.WriteSlice([]string{s7}, -1)
-		c.Assert(s7_ret, qt.Equals, -1)
+		s7Ret := row7.WriteSlice(s7, -1)
+		c.Assert(s7Ret, qt.Equals, -1)
+		s7Ret = row7.WriteSlice(&s7, -1)
+		c.Assert(s7Ret, qt.Equals, -1)
+		s7Ret = row7.WriteSlice([]string{s7}, -1)
+		c.Assert(s7Ret, qt.Equals, -1)
 
 		s8 := nullStringA{sql.NullString{String: "Smith", Valid: true}, sql.NullString{String: `What ever`, Valid: false}}
 		row8 := sheet.AddRow()
